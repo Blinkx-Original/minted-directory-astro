@@ -1,13 +1,7 @@
 import type { APIRoute } from 'astro';
-import {
-  DeleteObjectCommand,
-  GetObjectCommand,
-  ListObjectsV2Command,
-  PutObjectCommand,
-} from '@aws-sdk/client-s3';
 import { performance } from 'node:perf_hooks';
 
-import { getR2Bucket, getR2Client } from '../../lib/r2';
+import { deleteR2Object, getR2ObjectBody, listR2Diagnostics, putR2Object } from '../../lib/r2';
 
 interface StepResult {
   name: 'list' | 'put' | 'get' | 'del';
@@ -43,28 +37,7 @@ function createFailureResponse(step: StepResult['name'], error: unknown): Respon
   });
 }
 
-async function streamToString(body: unknown): Promise<string> {
-  if (typeof body === 'string') {
-    return body;
-  }
-
-  if (body && typeof (body as any).transformToString === 'function') {
-    return (body as any).transformToString();
-  }
-
-  const chunks: Uint8Array[] = [];
-  const readable = body as NodeJS.ReadableStream;
-
-  for await (const chunk of readable) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-
-  return Buffer.concat(chunks).toString('utf8');
-}
-
 export const GET: APIRoute = async () => {
-  const client = getR2Client();
-  const bucket = getR2Bucket();
   const steps: StepResult[] = [];
   const key = createDiagKey();
   let objectCreated = false;
@@ -86,51 +59,23 @@ export const GET: APIRoute = async () => {
 
   try {
     await runStep('list', async () => {
-      await client.send(
-        new ListObjectsV2Command({
-          Bucket: bucket,
-          Prefix: 'diag/',
-          MaxKeys: 1,
-        }),
-      );
+      await listR2Diagnostics('diag/');
     });
 
     const diagBody = JSON.stringify({ ok: true, t: new Date().toISOString() });
 
     await runStep('put', async () => {
-      await client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: diagBody,
-          ContentType: 'application/json',
-        }),
-      );
+      await putR2Object(key, diagBody, 'application/json');
       objectCreated = true;
     });
 
     await runStep('get', async () => {
-      const getResult = await client.send(
-        new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        }),
-      );
-      const bodyStream = (getResult as { Body?: unknown }).Body;
-      if (!bodyStream) {
-        throw new Error('Empty response body');
-      }
-      const body = await streamToString(bodyStream);
+      const body = await getR2ObjectBody(key);
       JSON.parse(body);
     });
 
     await runStep('del', async () => {
-      await client.send(
-        new DeleteObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        }),
-      );
+      await deleteR2Object(key);
     });
 
     const totalMs = steps.reduce((sum, step) => sum + step.ms, 0);
@@ -152,12 +97,7 @@ export const GET: APIRoute = async () => {
   } catch (caught) {
     if (objectCreated) {
       try {
-        await client.send(
-          new DeleteObjectCommand({
-            Bucket: bucket,
-            Key: key,
-          }),
-        );
+        await deleteR2Object(key);
       } catch {
         // ignore cleanup failures
       }
