@@ -17,6 +17,7 @@
     "@astrojs/mdx": "^4.2.0",
     "@astrojs/sitemap": "^3.2.1",
     "@astrojs/vue": "^5.0.7",
+    "@aws-sdk/client-s3": "^3.668.0",
     "@fontsource-variable/dm-sans": "^5.2.5",
     "@fontsource-variable/eb-garamond": "^5.2.5",
     "@fontsource-variable/gabarito": "^5.2.5",
