@@ -1,0 +1,523 @@
+---
+import Card from '../../components/Card.astro';
+import { getAdminSession } from '../../lib/session';
+
+export const prerender = false;
+
+const session = getAdminSession(Astro.cookies);
+if (!session?.isAdmin) {
+  return Astro.redirect('/admin/login');
+}
+
+const typesenseReady = Boolean(
+  import.meta.env.TYPESENSE_HOST && import.meta.env.TYPESENSE_API_KEY,
+);
+const r2Bucket = import.meta.env.R2_BUCKET ?? '';
+const r2Endpoint = import.meta.env.R2_S3_ENDPOINT ?? '';
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Dashboard</title>
+  </head>
+  <body class="admin-page">
+    <main class="shell">
+      <header class="page-header">
+        <h1>Admin Dashboard</h1>
+        <p class="tagline">Tools for keeping the catalog humming.</p>
+      </header>
+      <section class="stack">
+        <Card class="access-card">
+          <div class="access-row">
+            <div class="access-text">
+              <h2>Access</h2>
+              <p>Signed in as Admin.</p>
+            </div>
+            <form method="post" action="/admin/logout">
+              <button type="submit" class="secondary">Log out</button>
+            </form>
+          </div>
+        </Card>
+        <Card>
+          <div class="card-heading">
+            <div>
+              <h2>Access Connections</h2>
+              <p class="muted">Run these when something looks off.</p>
+            </div>
+            <a href="#" data-run-all class="run-all">Run all tests</a>
+          </div>
+          <div class="button-row">
+            <button id="test-r2" class="primary" data-service="r2" type="button">Test Cloudflare R2</button>
+            <button
+              id="test-typesense"
+              class="secondary"
+              disabled={!typesenseReady}
+              title={typesenseReady ? undefined : 'Coming soon'}
+              type="button"
+            >Test Typesense</button>
+          </div>
+          <dl class="env-list">
+            <div>
+              <dt>R2 Bucket</dt>
+              <dd>{r2Bucket || '—'}</dd>
+            </div>
+            <div>
+              <dt>R2 Endpoint</dt>
+              <dd>{r2Endpoint || '—'}</dd>
+            </div>
+          </dl>
+          <div class="log-block">
+            <h3>Recent results</h3>
+            <ul data-log></ul>
+            <p class="log-hint">Latest results appear on top. Only the last 10 are kept.</p>
+          </div>
+        </Card>
+      </section>
+    </main>
+    <script type="module" is:inline>
+      const logs = [];
+      const maxLogs = 10;
+      const logList = document.querySelector('[data-log]');
+      const r2Button = document.getElementById('test-r2');
+      const runAllLink = document.querySelector('[data-run-all]');
+      const typesenseButton = document.getElementById('test-typesense');
+
+      const renderLogs = () => {
+        if (!logList) return;
+        logList.innerHTML = '';
+        for (const entry of logs) {
+          const li = document.createElement('li');
+          li.className = 'log-entry';
+
+          const status = document.createElement('span');
+          status.className = 'status';
+          status.setAttribute('aria-hidden', 'true');
+          status.textContent = entry.ok ? '✅' : '❌';
+
+          const timeEl = document.createElement('time');
+          timeEl.dateTime = entry.timestampISO;
+          timeEl.textContent = entry.timestamp;
+
+          const message = document.createElement('span');
+          message.className = 'message';
+          message.textContent = entry.message;
+
+          const duration = document.createElement('span');
+          duration.className = 'duration';
+          duration.textContent = entry.duration ?? '';
+
+          li.append(status, timeEl, message, duration);
+          logList.appendChild(li);
+        }
+      };
+
+      const pushLog = (entry) => {
+        logs.unshift(entry);
+        if (logs.length > maxLogs) {
+          logs.pop();
+        }
+        renderLogs();
+      };
+
+      const formatMs = (ms) => `${ms} ms`;
+
+      const runR2Test = async () => {
+        if (!r2Button) return;
+        const originalLabel = r2Button.textContent;
+        r2Button.textContent = 'Testing…';
+        r2Button.disabled = true;
+        try {
+          const response = await fetch('/api/test-r2');
+          const data = await response.json();
+          const now = new Date();
+          const entryBase = {
+            timestamp: now.toLocaleTimeString(),
+            timestampISO: now.toISOString(),
+          };
+          if (response.ok && data?.ok) {
+            pushLog({
+              ok: true,
+              ...entryBase,
+              message: 'R2: PASS',
+              duration: formatMs(data.totalMs ?? 0),
+            });
+          } else {
+            pushLog({
+              ok: false,
+              ...entryBase,
+              message: `R2: FAIL — ${data?.failedStep ?? 'unknown'}: ${data?.error ?? 'error'}`,
+              duration: '',
+            });
+          }
+        } catch (error) {
+          const now = new Date();
+          pushLog({
+            ok: false,
+            timestamp: now.toLocaleTimeString(),
+            timestampISO: now.toISOString(),
+            message: `R2: FAIL — ${error instanceof Error ? error.message : 'Unknown error'}`,
+            duration: '',
+          });
+        } finally {
+          r2Button.disabled = false;
+          r2Button.textContent = originalLabel ?? 'Test Cloudflare R2';
+        }
+      };
+
+      const runTypesenseTest = async () => {
+        if (!typesenseButton || typesenseButton.disabled) return;
+        const originalLabel = typesenseButton.textContent;
+        typesenseButton.textContent = 'Testing…';
+        typesenseButton.disabled = true;
+        try {
+          const response = await fetch('/api/test-typesense');
+          const data = await response.json().catch(() => ({}));
+          const now = new Date();
+          const entryBase = {
+            timestamp: now.toLocaleTimeString(),
+            timestampISO: now.toISOString(),
+          };
+          if (response.ok && data?.ok) {
+            pushLog({
+              ok: true,
+              ...entryBase,
+              message: 'Typesense: PASS',
+              duration: formatMs(data.totalMs ?? 0),
+            });
+          } else {
+            const errorLabel = data?.error ? `: ${data.error}` : '';
+            pushLog({
+              ok: false,
+              ...entryBase,
+              message: `Typesense: FAIL — ${data?.failedStep ?? 'pending'}${errorLabel}`,
+              duration: '',
+            });
+          }
+        } catch (error) {
+          const now = new Date();
+          pushLog({
+            ok: false,
+            timestamp: now.toLocaleTimeString(),
+            timestampISO: now.toISOString(),
+            message: `Typesense: FAIL — ${error instanceof Error ? error.message : 'Unknown error'}`,
+            duration: '',
+          });
+        } finally {
+          typesenseButton.textContent = originalLabel ?? 'Test Typesense';
+          typesenseButton.disabled = false;
+        }
+      };
+
+      r2Button?.addEventListener('click', () => {
+        if (r2Button.dataset.cooldown === 'true') {
+          return;
+        }
+
+        runR2Test();
+        r2Button.dataset.cooldown = 'true';
+        setTimeout(() => {
+          if (r2Button) {
+            delete r2Button.dataset.cooldown;
+          }
+        }, 5000);
+      });
+
+      runAllLink?.addEventListener('click', (event) => {
+        event.preventDefault();
+        runR2Test();
+        runTypesenseTest();
+      });
+
+      typesenseButton?.addEventListener('click', (event) => {
+        event.preventDefault();
+        runTypesenseTest();
+      });
+    </script>
+  </body>
+</html>
+<style>
+  :global(body) {
+    margin: 0;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fafafa;
+    color: #111;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :global(body) {
+      background: #050505;
+      color: #f5f5f5;
+    }
+  }
+
+  .admin-page {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 3rem 1.5rem 4rem;
+  }
+
+  .shell {
+    width: min(960px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .page-header h1 {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.75rem, 2.4vw, 2.4rem);
+  }
+
+  .tagline {
+    margin: 0;
+    color: #555;
+    font-size: 1rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .tagline {
+      color: #ccc;
+    }
+  }
+
+  .stack {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  .access-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .access-text h2 {
+    margin: 0 0 0.35rem;
+    font-size: 1.35rem;
+  }
+
+  .access-text p {
+    margin: 0;
+    color: #555;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .access-text p {
+      color: #ccc;
+    }
+  }
+
+  .button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  button.primary,
+  button.secondary,
+  .secondary {
+    border: 1px solid #111;
+    border-radius: 0;
+    padding: 0.6rem 1.4rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    background: transparent;
+    color: inherit;
+  }
+
+  button.primary {
+    background: #111;
+    color: #fff;
+  }
+
+  button.primary[disabled] {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  button.secondary,
+  .secondary {
+    background: #fff;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    button.primary {
+      background: #f5f5f5;
+      color: #050505;
+      border-color: #f5f5f5;
+    }
+
+    button.secondary,
+    .secondary {
+      background: #111;
+      color: #f5f5f5;
+      border-color: #f5f5f5;
+    }
+  }
+
+  button.secondary[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .card-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .card-heading h2 {
+    margin: 0;
+    font-size: 1.35rem;
+  }
+
+  .muted {
+    margin: 0.25rem 0 0;
+    color: #555;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .muted {
+      color: #ccc;
+    }
+  }
+
+  .run-all {
+    font-size: 0.9rem;
+    text-decoration: underline;
+    color: inherit;
+  }
+
+  .run-all:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+  }
+
+  .env-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 0.75rem;
+    margin: 0;
+  }
+
+  .env-list div {
+    border: 1px solid #111;
+    border-radius: 0;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.6);
+  }
+
+  .env-list dt {
+    font-size: 0.75rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 0.4rem;
+    color: #555;
+  }
+
+  .env-list dd {
+    margin: 0;
+    font-weight: 600;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .env-list div {
+      background: rgba(17, 17, 17, 0.6);
+      border-color: #f5f5f5;
+    }
+
+    .env-list dt {
+      color: #aaa;
+    }
+  }
+
+  .log-block {
+    border: 1px solid #111;
+    padding: 1rem;
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .log-block h3 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .log-block ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .log-entry {
+    display: grid;
+    grid-template-columns: auto auto 1fr auto;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.9rem;
+  }
+
+  .log-entry time {
+    font-variant-numeric: tabular-nums;
+    color: #555;
+  }
+
+  .log-entry .message {
+    font-weight: 600;
+  }
+
+  .log-entry .duration {
+    color: #555;
+  }
+
+  .log-hint {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #777;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .log-block {
+      background: rgba(17, 17, 17, 0.85);
+      border-color: #f5f5f5;
+    }
+
+    .log-entry time,
+    .log-entry .duration,
+    .log-hint {
+      color: #bbb;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .admin-page {
+      padding: 2rem 1rem 3rem;
+    }
+
+    .log-entry {
+      grid-template-columns: auto 1fr;
+      grid-template-rows: auto auto;
+    }
+
+    .log-entry time {
+      grid-column: 1 / -1;
+    }
+
+    .log-entry .duration {
+      justify-self: end;
+    }
+  }
+</style>
