@@ -160,3 +160,5 @@ export async function GET({ params }: Props) {
 export async function getStaticPaths() {
   return await getRootPages(false);
 }
+
+export const prerender = true;

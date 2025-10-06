@@ -58,7 +58,9 @@ function vercelServerlessIntegration(options = {}) {
           throw new Error('Unable to locate Astro manifest in server output.');
         }
 
-        const indexSource = `import { createExports } from './_@astrojs-ssr-adapter.mjs';\nimport { manifest } from './${manifestFile}';\n\nconst { default: app } = createExports(manifest);\n\nexport default async function vercelHandler(req, res) {\n  try {\n    await app(req, res);\n  } catch (err) {\n    console.error('Astro request failed', err);\n    res.statusCode = 500;\n    res.end('Internal Server Error');\n  }\n}\n`;
+        const hasEntryModule = existsSync(join(functionDir, 'entry.mjs'));
+        const entryImport = hasEntryModule ? "import './entry.mjs';\n" : '';
+        const indexSource = `${entryImport}import { createExports } from './_@astrojs-ssr-adapter.mjs';\nimport { manifest } from './${manifestFile}';\n\nconst { default: app } = createExports(manifest);\n\nexport default async function vercelHandler(req, res) {\n  try {\n    await app(req, res);\n  } catch (err) {\n    console.error('Astro request failed', err);\n    res.statusCode = 500;\n    res.end('Internal Server Error');\n  }\n}\n`;
         writeFileSync(functionEntry, indexSource, 'utf8');
 
         const vcConfig = {
