@@ -20,15 +20,32 @@ function readSecret(): string | undefined {
   return value;
 }
 
+function toBase64Url(value: Buffer | string): string {
+  const buffer = typeof value === 'string' ? Buffer.from(value, 'utf8') : value;
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/u, '');
+}
+
+function fromBase64Url(value: string): Buffer {
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const paddingLength = (4 - (normalized.length % 4)) % 4;
+  const padded = normalized + '='.repeat(paddingLength);
+  return Buffer.from(padded, 'base64');
+}
+
 function signPayload(payload: string, secret: string): string {
-  return createHmac('sha256', secret).update(payload).digest('base64url');
+  const digest = createHmac('sha256', secret).update(payload).digest();
+  return toBase64Url(digest);
 }
 
 function encodeSession(data: AdminSession, secret: string): string {
   const payload = JSON.stringify(data);
   const signature = signPayload(payload, secret);
   const combined = `${payload}.${signature}`;
-  return Buffer.from(combined, 'utf8').toString('base64url');
+  return toBase64Url(combined);
 }
 
 function decodeSession(raw: string, secret: string | undefined): AdminSession | null {
@@ -37,7 +54,7 @@ function decodeSession(raw: string, secret: string | undefined): AdminSession | 
   }
 
   try {
-    const decoded = Buffer.from(raw, 'base64url').toString('utf8');
+    const decoded = fromBase64Url(raw).toString('utf8');
     const separator = decoded.lastIndexOf('.');
     if (separator === -1) {
       return null;
@@ -47,8 +64,8 @@ function decodeSession(raw: string, secret: string | undefined): AdminSession | 
     const providedSignature = decoded.slice(separator + 1);
     const expectedSignature = signPayload(payload, secret);
 
-    const providedBuffer = Buffer.from(providedSignature, 'utf8');
-    const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
+    const providedBuffer = fromBase64Url(providedSignature);
+    const expectedBuffer = fromBase64Url(expectedSignature);
 
     if (providedBuffer.length !== expectedBuffer.length) {
       return null;
@@ -109,16 +126,21 @@ export function setAdminSession(cookies: AstroCookies): boolean {
     return false;
   }
 
-  const value = encodeSession({ isAdmin: true }, secret);
-  cookies.set(SESSION_COOKIE, value, {
-    path: '/',
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: Boolean(import.meta.env.PROD),
-    maxAge: SESSION_TTL_SECONDS,
-  });
+  try {
+    const value = encodeSession({ isAdmin: true }, secret);
+    cookies.set(SESSION_COOKIE, value, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: Boolean(import.meta.env.PROD),
+      maxAge: SESSION_TTL_SECONDS,
+    });
 
-  return true;
+    return true;
+  } catch (err) {
+    console.error('Failed to encode admin session cookie.', err);
+    return false;
+  }
 }
 
 export function getAdminSession(cookies: AstroCookies): AdminSession | null {
