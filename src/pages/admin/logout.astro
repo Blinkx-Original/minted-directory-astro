@@ -3,6 +3,8 @@ import { clearAdminSession } from '../../lib/session';
 
 export const prerender = false;
 
-clearAdminSession(Astro.cookies);
-return Astro.redirect('/admin/login');
+const cookie = clearAdminSession();
+const headers = new Headers({ Location: '/admin/login' });
+headers.append('Set-Cookie', cookie);
+return new Response(null, { status: 303, headers });
 ---

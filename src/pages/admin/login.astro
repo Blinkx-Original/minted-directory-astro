@@ -24,9 +24,11 @@ if (Astro.request.method === 'POST') {
   if (!secretConfigured) {
     error = 'Admin password is not configured. Please set the ADMIN_PASSWORD environment variable.';
   } else if (verifyAdminPassword(password)) {
-    const didSet = setAdminSession(Astro.cookies);
-    if (didSet) {
-      return Astro.redirect('/admin', 303);
+    const cookie = setAdminSession();
+    if (cookie) {
+      const headers = new Headers({ Location: '/admin' });
+      headers.append('Set-Cookie', cookie);
+      return new Response(null, { status: 303, headers });
     }
 
     error = 'Unable to create admin session. Check server logs for details.';

@@ -4,6 +4,61 @@ import type { AstroCookies } from 'astro';
 const SESSION_COOKIE = 'admin_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // 30 days
 
+type SameSiteValue = 'strict' | 'lax' | 'none';
+
+interface CookieOptions {
+  domain?: string;
+  expires?: Date;
+  httpOnly?: boolean;
+  maxAge?: number;
+  path?: string;
+  sameSite?: SameSiteValue;
+  secure?: boolean;
+}
+
+function serializeCookie(name: string, value: string, options: CookieOptions = {}): string {
+  const encodedName = encodeURIComponent(name);
+  const encodedValue = encodeURIComponent(value);
+  const parts = [`${encodedName}=${encodedValue}`];
+
+  if (options.domain) {
+    parts.push(`Domain=${options.domain}`);
+  }
+
+  if (options.path) {
+    parts.push(`Path=${options.path}`);
+  }
+
+  if (typeof options.maxAge === 'number') {
+    const maxAge = Math.trunc(options.maxAge);
+    parts.push(`Max-Age=${maxAge}`);
+  }
+
+  if (options.expires) {
+    parts.push(`Expires=${options.expires.toUTCString()}`);
+  }
+
+  if (options.httpOnly) {
+    parts.push('HttpOnly');
+  }
+
+  if (options.secure) {
+    parts.push('Secure');
+  }
+
+  if (options.sameSite) {
+    const normalized = options.sameSite.toLowerCase() as SameSiteValue;
+    const label = normalized === 'none'
+      ? 'None'
+      : normalized === 'strict'
+        ? 'Strict'
+        : 'Lax';
+    parts.push(`SameSite=${label}`);
+  }
+
+  return parts.join('; ');
+}
+
 interface AdminSession {
   isAdmin: true;
 }
@@ -119,27 +174,27 @@ export function verifyAdminPassword(candidate: unknown): boolean {
   }
 }
 
-export function setAdminSession(cookies: AstroCookies): boolean {
+export function setAdminSession(): string | null {
   const secret = readSecret();
   if (!secret) {
     console.error('ADMIN_PASSWORD env var is not set; unable to establish admin session.');
-    return false;
+    return null;
   }
 
   try {
     const value = encodeSession({ isAdmin: true }, secret);
-    cookies.set(SESSION_COOKIE, value, {
+    const expires = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
+    return serializeCookie(SESSION_COOKIE, value, {
       path: '/',
       httpOnly: true,
       sameSite: 'lax',
       secure: Boolean(import.meta.env.PROD),
       maxAge: SESSION_TTL_SECONDS,
+      expires,
     });
-
-    return true;
   } catch (err) {
     console.error('Failed to encode admin session cookie.', err);
-    return false;
+    return null;
   }
 }
 
@@ -152,6 +207,13 @@ export function getAdminSession(cookies: AstroCookies): AdminSession | null {
   return decodeSession(cookie.value, readSecret());
 }
 
-export function clearAdminSession(cookies: AstroCookies): void {
-  cookies.delete(SESSION_COOKIE, { path: '/' });
+export function clearAdminSession(): string {
+  return serializeCookie(SESSION_COOKIE, '', {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: Boolean(import.meta.env.PROD),
+    maxAge: 0,
+    expires: new Date(0),
+  });
 }
