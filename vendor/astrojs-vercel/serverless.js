@@ -1,7 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 const entrypoint = new URL('./serverless/entrypoint.mjs', import.meta.url);
 
@@ -56,10 +56,40 @@ function vercelServerlessIntegration(options = {}) {
 
         const packageJsonSrc = join(projectRoot, 'package.json');
         const packageJsonDest = join(functionDir, 'package.json');
+        let packageJson;
         if (existsSync(packageJsonSrc)) {
           cpSync(packageJsonSrc, packageJsonDest);
+          try {
+            packageJson = JSON.parse(readFileSync(packageJsonSrc, 'utf8'));
+          } catch (err) {
+            logger.warn('vercel', `Unable to parse package.json for dependency inspection: ${err instanceof Error ? err.message : String(err)}`);
+          }
         } else {
           logger.warn('vercel', 'No package.json found in project root; serverless function will not contain dependencies.');
+        }
+
+        if (packageJson) {
+          const dependencyGroups = [
+            packageJson.dependencies ?? {},
+            packageJson.optionalDependencies ?? {},
+            packageJson.peerDependencies ?? {}
+          ];
+
+          for (const deps of dependencyGroups) {
+            for (const spec of Object.values(deps)) {
+              if (typeof spec === 'string' && spec.startsWith('file:')) {
+                const relativePath = spec.slice('file:'.length);
+                const src = join(projectRoot, relativePath);
+                const dest = join(functionDir, relativePath);
+                if (!existsSync(src)) {
+                  logger.warn('vercel', `Local dependency path ${relativePath} not found; skipping copy.`);
+                  continue;
+                }
+                mkdirSync(dirname(dest), { recursive: true });
+                cpSync(src, dest, { recursive: true });
+              }
+            }
+          }
         }
 
         const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'];
