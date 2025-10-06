@@ -9,12 +9,15 @@ interface AdminSession {
 }
 
 function readSecret(): string | undefined {
-  const secret = import.meta.env.ADMIN_PASSWORD;
-  if (!secret || secret.length === 0) {
+  const secret = typeof process !== 'undefined' ? process.env.ADMIN_PASSWORD : undefined;
+  const fallback = import.meta.env.ADMIN_PASSWORD;
+  const value = secret ?? fallback;
+
+  if (!value || value.length === 0) {
     return undefined;
   }
 
-  return secret;
+  return value;
 }
 
 function signPayload(payload: string, secret: string): string {
@@ -68,6 +71,35 @@ function decodeSession(raw: string, secret: string | undefined): AdminSession | 
 
 export function isAdminSecretConfigured(): boolean {
   return Boolean(readSecret());
+}
+
+function constantTimeCompare(input: string, secret: string): boolean {
+  const provided = Buffer.from(input, 'utf8');
+  const expected = Buffer.from(secret, 'utf8');
+
+  if (provided.length !== expected.length) {
+    return false;
+  }
+
+  return timingSafeEqual(provided, expected);
+}
+
+export function verifyAdminPassword(candidate: unknown): boolean {
+  if (typeof candidate !== 'string') {
+    return false;
+  }
+
+  const secret = readSecret();
+  if (!secret) {
+    return false;
+  }
+
+  try {
+    return constantTimeCompare(candidate, secret);
+  } catch (err) {
+    console.error('Failed to compare admin password securely.', err);
+    return false;
+  }
 }
 
 export function setAdminSession(cookies: AstroCookies): boolean {

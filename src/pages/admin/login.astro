@@ -1,6 +1,11 @@
 ---
 import Card from '../../components/Card.astro';
-import { getAdminSession, isAdminSecretConfigured, setAdminSession } from '../../lib/session';
+import {
+  getAdminSession,
+  isAdminSecretConfigured,
+  setAdminSession,
+  verifyAdminPassword,
+} from '../../lib/session';
 
 export const prerender = false;
 
@@ -15,11 +20,10 @@ let error: string | null = null;
 if (Astro.request.method === 'POST') {
   const formData = await Astro.request.formData();
   const password = formData.get('password');
-  const adminPassword = import.meta.env.ADMIN_PASSWORD;
 
-  if (!secretConfigured || !adminPassword) {
+  if (!secretConfigured) {
     error = 'Admin password is not configured. Please set the ADMIN_PASSWORD environment variable.';
-  } else if (typeof password === 'string' && password === adminPassword) {
+  } else if (verifyAdminPassword(password)) {
     const didSet = setAdminSession(Astro.cookies);
     if (didSet) {
       return Astro.redirect('/admin');
