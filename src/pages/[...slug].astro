@@ -17,6 +17,8 @@ export async function getStaticPaths() {
   return await getRootPages();
 }
 
+export const prerender = true;
+
 const landingView = !slug || slug === "blog";
 ---
 
