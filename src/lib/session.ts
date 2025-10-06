@@ -8,28 +8,31 @@ interface AdminSession {
   isAdmin: true;
 }
 
-function getSecret(): string {
+function readSecret(): string | undefined {
   const secret = import.meta.env.ADMIN_PASSWORD;
-  if (!secret) {
-    throw new Error('ADMIN_PASSWORD env var is not set.');
+  if (!secret || secret.length === 0) {
+    return undefined;
   }
 
   return secret;
 }
 
-function signPayload(payload: string): string {
-  const secret = getSecret();
+function signPayload(payload: string, secret: string): string {
   return createHmac('sha256', secret).update(payload).digest('base64url');
 }
 
-function encodeSession(data: AdminSession): string {
+function encodeSession(data: AdminSession, secret: string): string {
   const payload = JSON.stringify(data);
-  const signature = signPayload(payload);
+  const signature = signPayload(payload, secret);
   const combined = `${payload}.${signature}`;
   return Buffer.from(combined, 'utf8').toString('base64url');
 }
 
-function decodeSession(raw: string): AdminSession | null {
+function decodeSession(raw: string, secret: string | undefined): AdminSession | null {
+  if (!secret) {
+    return null;
+  }
+
   try {
     const decoded = Buffer.from(raw, 'base64url').toString('utf8');
     const separator = decoded.lastIndexOf('.');
@@ -39,7 +42,7 @@ function decodeSession(raw: string): AdminSession | null {
 
     const payload = decoded.slice(0, separator);
     const providedSignature = decoded.slice(separator + 1);
-    const expectedSignature = signPayload(payload);
+    const expectedSignature = signPayload(payload, secret);
 
     const providedBuffer = Buffer.from(providedSignature, 'utf8');
     const expectedBuffer = Buffer.from(expectedSignature, 'utf8');
@@ -63,8 +66,18 @@ function decodeSession(raw: string): AdminSession | null {
   return null;
 }
 
-export function setAdminSession(cookies: AstroCookies): void {
-  const value = encodeSession({ isAdmin: true });
+export function isAdminSecretConfigured(): boolean {
+  return Boolean(readSecret());
+}
+
+export function setAdminSession(cookies: AstroCookies): boolean {
+  const secret = readSecret();
+  if (!secret) {
+    console.error('ADMIN_PASSWORD env var is not set; unable to establish admin session.');
+    return false;
+  }
+
+  const value = encodeSession({ isAdmin: true }, secret);
   cookies.set(SESSION_COOKIE, value, {
     path: '/',
     httpOnly: true,
@@ -72,6 +85,8 @@ export function setAdminSession(cookies: AstroCookies): void {
     secure: Boolean(import.meta.env.PROD),
     maxAge: SESSION_TTL_SECONDS,
   });
+
+  return true;
 }
 
 export function getAdminSession(cookies: AstroCookies): AdminSession | null {
@@ -80,7 +95,7 @@ export function getAdminSession(cookies: AstroCookies): AdminSession | null {
     return null;
   }
 
-  return decodeSession(cookie.value);
+  return decodeSession(cookie.value, readSecret());
 }
 
 export function clearAdminSession(cookies: AstroCookies): void {

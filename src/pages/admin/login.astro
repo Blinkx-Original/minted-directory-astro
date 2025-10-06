@@ -1,9 +1,10 @@
 ---
 import Card from '../../components/Card.astro';
-import { getAdminSession, setAdminSession } from '../../lib/session';
+import { getAdminSession, isAdminSecretConfigured, setAdminSession } from '../../lib/session';
 
 export const prerender = false;
 
+const secretConfigured = isAdminSecretConfigured();
 const session = getAdminSession(Astro.cookies);
 if (session?.isAdmin) {
   return Astro.redirect('/admin');
@@ -16,12 +17,24 @@ if (Astro.request.method === 'POST') {
   const password = formData.get('password');
   const adminPassword = import.meta.env.ADMIN_PASSWORD;
 
-  if (typeof password === 'string' && password === adminPassword) {
-    setAdminSession(Astro.cookies);
-    return Astro.redirect('/admin');
-  }
+  if (!secretConfigured || !adminPassword) {
+    error = 'Admin password is not configured. Please set the ADMIN_PASSWORD environment variable.';
+  } else if (typeof password === 'string' && password === adminPassword) {
+    const didSet = setAdminSession(Astro.cookies);
+    if (didSet) {
+      return Astro.redirect('/admin');
+    }
 
-  error = 'Incorrect password. Please try again.';
+    error = 'Unable to create admin session. Check server logs for details.';
+  } else {
+    error = 'Incorrect password. Please try again.';
+  }
+}
+
+const disableForm = !secretConfigured;
+
+if (!error && disableForm) {
+  error = 'Admin password is not configured. Please set the ADMIN_PASSWORD environment variable.';
 }
 ---
 <html lang="en">
@@ -46,10 +59,11 @@ if (Astro.request.method === 'POST') {
               autocomplete="current-password"
               required
               autofocus
+              disabled={disableForm}
             />
           </label>
           {error && <p class="error">{error}</p>}
-          <button type="submit" class="primary">Sign in</button>
+          <button type="submit" class="primary" disabled={disableForm}>Sign in</button>
         </form>
       </Card>
     </main>
