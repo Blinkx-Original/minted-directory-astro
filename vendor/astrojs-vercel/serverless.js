@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 
 const entrypoint = new URL('./serverless/entrypoint.mjs', import.meta.url);
 
@@ -53,8 +53,12 @@ function vercelServerlessIntegration(options = {}) {
           cpSync(serverDir, functionDir, { recursive: true });
         }
 
-        const relativeServerEntry = './entry.mjs';
-        const indexSource = `import handler from ${JSON.stringify(relativeServerEntry)};\n\nexport default async function vercelHandler(req, res) {\n  try {\n    await handler(req, res);\n  } catch (err) {\n    console.error('Astro request failed', err);\n    res.statusCode = 500;\n    res.end('Internal Server Error');\n  }\n}\n`;
+        const manifestFile = readdirSync(functionDir).find((file) => file.startsWith('manifest_') && file.endsWith('.mjs'));
+        if (!manifestFile) {
+          throw new Error('Unable to locate Astro manifest in server output.');
+        }
+
+        const indexSource = `import { createExports } from './_@astrojs-ssr-adapter.mjs';\nimport { manifest } from './${manifestFile}';\n\nconst { default: app } = createExports(manifest);\n\nexport default async function vercelHandler(req, res) {\n  try {\n    await app(req, res);\n  } catch (err) {\n    console.error('Astro request failed', err);\n    res.statusCode = 500;\n    res.end('Internal Server Error');\n  }\n}\n`;
         writeFileSync(functionEntry, indexSource, 'utf8');
 
         const vcConfig = {
