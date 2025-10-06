@@ -26,6 +26,9 @@ importers:
       '@astrojs/sitemap':
         specifier: ^3.2.1
         version: 3.2.1
+      '@astrojs/vercel':
+        specifier: file:vendor/astrojs-vercel
+        version: file:vendor/astrojs-vercel
       '@astrojs/vue':
         specifier: ^5.0.7
         version: 5.0.7(@types/node@22.7.4)(astro@5.5.2(@types/node@22.7.4)(jiti@2.4.2)(lightningcss@1.29.2)(rollup@4.34.9)(typescript@5.6.2)(yaml@2.5.1))(jiti@2.4.2)(lightningcss@1.29.2)(rollup@4.34.9)(vue@3.5.11(typescript@5.6.2))(yaml@2.5.1)
@@ -205,6 +208,9 @@ packages:
   '@astrojs/telemetry@3.2.0':
     resolution: {integrity: sha512-wxhSKRfKugLwLlr4OFfcqovk+LIFtKwLyGPqMsv+9/ibqqnW3Gv7tBhtKEb0gAyUAC4G9BTVQeQahqnQAhd6IQ==}
     engines: {node: ^18.17.1 || ^20.3.0 || >=22.0.0}
+
+  '@astrojs/vercel@file:vendor/astrojs-vercel':
+    resolution: {directory: vendor/astrojs-vercel, type: directory}
 
   '@astrojs/vue@5.0.7':
     resolution: {integrity: sha512-PSES96WbJhozuGBUgMTzbAlQUdAZm0rpQjem+plsT/M0LQWpTZESZm/jf4IW7mYCtKmnAymWCH1meqsUfHCYgw==}
@@ -4186,6 +4192,8 @@ snapshots:
       which-pm-runs: 1.1.0
     transitivePeerDependencies:
       - supports-color
+
+  '@astrojs/vercel@file:vendor/astrojs-vercel': {}
 
   '@astrojs/vue@5.0.7(@types/node@22.7.4)(astro@5.5.2(@types/node@22.7.4)(jiti@2.4.2)(lightningcss@1.29.2)(rollup@4.34.9)(typescript@5.6.2)(yaml@2.5.1))(jiti@2.4.2)(lightningcss@1.29.2)(rollup@4.34.9)(vue@3.5.11(typescript@5.6.2))(yaml@2.5.1)':
     dependencies:
