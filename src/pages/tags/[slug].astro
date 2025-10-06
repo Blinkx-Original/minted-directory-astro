@@ -17,6 +17,8 @@ export async function getStaticPaths() {
   return result;
 }
 
+export const prerender = true;
+
 const { title } = Astro.props;
 
 const allListings = await getCollection("directory");
