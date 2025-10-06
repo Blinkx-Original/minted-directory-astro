@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 
 const entrypoint = new URL('./serverless/entrypoint.mjs', import.meta.url);
 
@@ -51,6 +52,103 @@ function vercelServerlessIntegration(options = {}) {
         }
         if (existsSync(serverDir)) {
           cpSync(serverDir, functionDir, { recursive: true });
+        }
+
+        const packageJsonSrc = join(projectRoot, 'package.json');
+        const packageJsonDest = join(functionDir, 'package.json');
+        let packageJson;
+        if (existsSync(packageJsonSrc)) {
+          cpSync(packageJsonSrc, packageJsonDest);
+          try {
+            packageJson = JSON.parse(readFileSync(packageJsonSrc, 'utf8'));
+          } catch (err) {
+            logger.warn('vercel', `Unable to parse package.json for dependency inspection: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          logger.warn('vercel', 'No package.json found in project root; serverless function will not contain dependencies.');
+        }
+
+        if (packageJson) {
+          const dependencyGroups = [
+            packageJson.dependencies ?? {},
+            packageJson.optionalDependencies ?? {},
+            packageJson.peerDependencies ?? {}
+          ];
+
+          for (const deps of dependencyGroups) {
+            for (const spec of Object.values(deps)) {
+              if (typeof spec === 'string' && spec.startsWith('file:')) {
+                const relativePath = spec.slice('file:'.length);
+                const src = join(projectRoot, relativePath);
+                const dest = join(functionDir, relativePath);
+                if (!existsSync(src)) {
+                  logger.warn('vercel', `Local dependency path ${relativePath} not found; skipping copy.`);
+                  continue;
+                }
+                mkdirSync(dirname(dest), { recursive: true });
+                cpSync(src, dest, { recursive: true });
+              }
+            }
+          }
+        }
+
+        const lockFiles = ['pnpm-lock.yaml', 'package-lock.json', 'yarn.lock'];
+        let copiedLockfile = '';
+        for (const lock of lockFiles) {
+          const src = join(projectRoot, lock);
+          if (existsSync(src)) {
+            cpSync(src, join(functionDir, lock));
+            copiedLockfile = lock;
+            break;
+          }
+        }
+
+        const installDependencies = () => {
+          if (!existsSync(packageJsonDest)) {
+            return;
+          }
+
+          const installCommands = [
+            {
+              command: 'pnpm',
+              args: ['install', '--prod', '--ignore-scripts', '--frozen-lockfile'],
+              condition: () => copiedLockfile === 'pnpm-lock.yaml'
+            },
+            {
+              command: 'yarn',
+              args: ['install', '--production', '--ignore-scripts'],
+              condition: () => copiedLockfile === 'yarn.lock'
+            },
+            {
+              command: 'npm',
+              args: ['install', '--omit=dev', '--ignore-scripts'],
+              condition: () => true
+            }
+          ];
+
+          const { command, args } = installCommands.find(({ condition }) => condition());
+          logger.info('vercel', `Installing serverless function dependencies using ${command}...`);
+          const result = spawnSync(command, args, {
+            cwd: functionDir,
+            stdio: 'inherit'
+          });
+
+          if (result.error) {
+            throw result.error;
+          }
+
+          if (result.status !== 0) {
+            throw new Error(`Failed to install serverless function dependencies with ${command}.`);
+          }
+        };
+
+        installDependencies();
+
+        const astroModuleDir = join(functionDir, 'node_modules', 'astro');
+        if (!existsSync(astroModuleDir)) {
+          throw new Error(
+            'Serverless function is missing the Astro runtime. Ensure dependencies are installed correctly.'
+          );
         }
 
         const manifestFile = readdirSync(functionDir).find((file) => file.startsWith('manifest_') && file.endsWith('.mjs'));
