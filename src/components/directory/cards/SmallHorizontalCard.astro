@@ -1,8 +1,15 @@
 ---
 import { Image } from "astro:assets";
 import DirectoryFeaturedTag from "../FeaturedTag.astro";
+import { isImageMetadata } from "@util/isImageMetadata";
+
 const { myItem, href } = Astro.props;
 const type = "small-horizontal";
+const image = myItem.image;
+const hasImageMetadata = isImageMetadata(image);
+const imageMetadata = hasImageMetadata ? image : undefined;
+const imageUrl = typeof image === "string" ? image : undefined;
+const altText = myItem.title ?? "";
 ---
 
 <a
@@ -12,13 +19,24 @@ const type = "small-horizontal";
   { myItem.featured ? <DirectoryFeaturedTag class="ml-6"  /> : <></> }
   <div class="flex-none mr-3 rounded-none w-16 h-16 overflow-hidden">
     {
-      myItem.image ? (
-        <Image
-          class="w-16 h-16 object-cover"
-          src={myItem.image}
-          alt={myItem.title}
-          loading="lazy"
-        />
+      image ? (
+        imageMetadata ? (
+          <Image
+            {...(imageMetadata as any)}
+            class="w-16 h-16 object-cover"
+            alt={altText}
+            loading="lazy"
+          />
+        ) : imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={altText}
+            loading="lazy"
+            class="w-16 h-16 object-cover"
+          />
+        ) : (
+          <div class="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg" />
+        )
       ) : (
         <div class="w-16 h-16 bg-gray-200 dark:bg-gray-700 rounded-lg" />
       )
