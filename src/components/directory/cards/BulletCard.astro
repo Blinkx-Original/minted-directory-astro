@@ -1,19 +1,40 @@
 ---
 import Icon from "node_modules/astro-icon/components/Icon.astro";
 import { Image } from "astro:assets";
+import { isImageMetadata } from "@util/isImageMetadata";
+
 const { myItem, href } = Astro.props;
+const image = myItem.image;
+const hasImageMetadata = isImageMetadata(image);
+const imageMetadata = hasImageMetadata ? image : undefined;
+const imageUrl = typeof image === "string" ? image : undefined;
+const altText = myItem.title ?? "";
 ---
 
 <a href={href}>
   <div class="flex flex-row gap-2.5 items-center">
     {
-      myItem.image ? (
-        <Image
-          class="h-5 w-5 flex-shrink-0"
-          src={myItem.image}
-          alt={myItem.title}
-          loading="lazy"
-        />
+      image ? (
+        imageMetadata ? (
+          <Image
+            {...(imageMetadata as any)}
+            class="h-5 w-5 flex-shrink-0"
+            alt={altText}
+            loading="lazy"
+          />
+        ) : imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={altText}
+            loading="lazy"
+            class="h-5 w-5 flex-shrink-0"
+          />
+        ) : (
+          <Icon
+            class="h-5 w-5 flex-shrink-0 text-gray-200 dark:text-gray-700"
+            name="tabler:circle-filled"
+          />
+        )
       ) : (
         <Icon
           class="h-5 w-5 flex-shrink-0 text-gray-200 dark:text-gray-700"

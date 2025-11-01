@@ -2,17 +2,50 @@
 import UiTag from "@components/ui/tags/Tag.astro";
 import DirectoryFeaturedTag from "../FeaturedTag.astro";
 import { Image } from "astro:assets";
+import { isImageMetadata } from "@util/isImageMetadata";
+
 const { myItem, href } = Astro.props;
+const image = myItem.image;
+const hasImageMetadata = isImageMetadata(image);
+const imageMetadata = hasImageMetadata ? image : undefined;
+const imageUrl = typeof image === "string" ? image : undefined;
+const altText = myItem.title ?? "";
 ---
 
 <a href={href}
   class="block h-full border border-gray-200 dark:border-gray-500 hover:border-gray-400 hover:border-solid dark:hover:border-gray-300 rounded relative group transition-all duration-300">
   { myItem.featured ? <DirectoryFeaturedTag class="ml-6"  /> : <></> }
-  { myItem.image ? <Image height={500} width={800} class="w-full h-48 rounded-t object-cover"
-    src={myItem.image} alt={myItem.title} /> :  <div
-    class="w-full h-48 px-2 text-center flex justify-center items-center rounded-t font-bold text-2xl bg-gray-200 dark:bg-gray-600">
-    {myItem.title }
-  </div> }
+  {
+    image ? (
+      imageMetadata ? (
+        <Image
+          {...(imageMetadata as any)}
+          class="w-full h-48 rounded-t object-cover"
+          alt={altText}
+          loading="lazy"
+        />
+      ) : imageUrl ? (
+        <img
+          src={imageUrl}
+          alt={altText}
+          loading="lazy"
+          class="w-full h-48 rounded-t object-cover"
+        />
+      ) : (
+        <div
+          class="w-full h-48 px-2 text-center flex justify-center items-center rounded-t font-bold text-2xl bg-gray-200 dark:bg-gray-600"
+        >
+          {myItem.title }
+        </div>
+      )
+    ) : (
+      <div
+        class="w-full h-48 px-2 text-center flex justify-center items-center rounded-t font-bold text-2xl bg-gray-200 dark:bg-gray-600"
+      >
+        {myItem.title }
+      </div>
+    )
+  }
   <div class="p-6">
     <h3 class="m-0 text-lg font-semibold dark:text-gray-50 card-title">
       { myItem?.title }
