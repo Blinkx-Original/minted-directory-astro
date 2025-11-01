@@ -13,8 +13,21 @@ description = "Find the best nuxt starter kits."
 url = "https://nuxtstarters.com"
 
 [directoryData.source]
-name = "json"    # default, mock, sheets, json
+name = "tidb"    # default, mock, sheets, json, tidb
 links = "normal"
+
+[directoryData.source.tidb]
+table = "products"
+tagSeparator = ","
+
+[directoryData.source.tidb.fields]
+id = "id"
+title = "title"
+description = "description"
+tags = "tags"
+image = "image"
+link = "link"
+featured = "featured"
 
 [directoryData.tagPages]
 title = "{0} Apps"

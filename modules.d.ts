@@ -8,3 +8,5 @@ declare module '@astrojs/vercel/serverless' {
   function vercel(options?: Record<string, unknown>): AstroIntegration;
   export default vercel;
 }
+
+declare module 'mysql2/promise';
