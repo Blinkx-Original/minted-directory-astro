@@ -79,6 +79,23 @@ const directoryData = z.object({
       databaseId: z.string(),
     })
     .optional(),
+    tidb: z.object({
+      table: z.string().optional(),
+      query: z.string().optional(),
+      fields: z
+        .object({
+          id: z.string().optional(),
+          title: z.string().optional(),
+          description: z.string().optional(),
+          tags: z.string().optional(),
+          icon: z.string().optional(),
+          image: z.string().optional(),
+          link: z.string().optional(),
+          featured: z.string().optional(),
+        })
+        .optional(),
+      tagSeparator: z.string().optional(),
+    }).optional(),
   }),
   tagPages: z.object({
     title: z.string(),

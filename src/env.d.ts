@@ -13,6 +13,14 @@ interface ImportMetaEnv {
   readonly R2_S3_FORCE_PATH_STYLE?: string;
   readonly TYPESENSE_HOST?: string;
   readonly TYPESENSE_API_KEY?: string;
+  readonly TIDB_HOST?: string;
+  readonly TIDB_PORT?: string;
+  readonly TIDB_USER?: string;
+  readonly TIDB_PASSWORD?: string;
+  readonly TIDB_DATABASE?: string;
+  readonly TIDB_ENABLE_SSL?: string;
+  readonly TIDB_SSL_CA?: string;
+  readonly TIDB_SSL_REJECT_UNAUTHORIZED?: string;
 }
 
 interface ImportMeta {

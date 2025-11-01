@@ -1,6 +1,7 @@
 import configData from "@util/themeConfig";
 import { defineCollection } from "astro:content";
 import { sheetLoad } from "./sheets";
+import { tidbLoader } from "./tidb";
 import { directorySchema } from "@validation/directory";
 import { z } from "zod";
 import { mockLoader } from "@ascorbic/mock-loader";
@@ -61,6 +62,14 @@ export function createDirectoryCollection() {
       loader: notionLoader({
         auth: notionToken,
         database_id: databaseId
+      }),
+      schema: directorySchema(z.string().url())
+    });
+  }
+  if (source === 'tidb') {
+    return defineCollection({
+      loader: tidbLoader({
+        schema: directorySchema(z.string().url()),
       }),
       schema: directorySchema(z.string().url())
     });
